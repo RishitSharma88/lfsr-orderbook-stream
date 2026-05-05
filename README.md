@@ -1,4 +1,4 @@
-# FPGA LFSR Tick Stream Generator
+# LFSR Orderbook Stream
 
 A hardware-software system that generates a continuous pseudo-random data stream on an FPGA and consumes it on a host machine through a lock-free queue. The FPGA runs an 8-bit Galois LFSR paired with a MISR (Multiple Input Signature Register) for integrity checking, transmits byte pairs over UART, and a C++ application reads the stream into a lock-free ring buffer for downstream consumption by an order book builder.
 
@@ -8,9 +8,9 @@ Built for the Numato Mimas V2 (Xilinx Spartan-6) FPGA board.
 
 The system has two halves:
 
-1. **FPGA side** -- A Verilog design that runs a Galois LFSR to produce pseudo-random bytes, feeds them into a MISR for signature accumulation, and sends both values over UART at 9600 baud. After every 255 cycles (the maximal-length period of an 8-bit LFSR), a `0xAA` marker byte is transmitted and the MISR is reset. The current LFSR state is also displayed on the board's LEDs.
+1. **FPGA side:** A Verilog design that runs a Galois LFSR to produce pseudo-random bytes, feeds them into a MISR for signature accumulation, and sends both values over UART at 9600 baud. After every 255 cycles (the maximal-length period of an 8-bit LFSR), a `0xAA` marker byte is transmitted and the MISR is reset. The current LFSR state is also displayed on the board's LEDs.
 
-2. **Host side** -- A C++17 application with a producer thread that reads LFSR+MISR byte pairs from the serial port and pushes them into a lock-free SPSC ring buffer. The consumer side (order book builder) pops packets from the queue and is responsible for interpreting tick data and constructing the order book.
+2. **Host side:** A C++17 application with a producer thread that reads LFSR+MISR byte pairs from the serial port and pushes them into a lock-free SPSC ring buffer. The consumer side (order book builder) pops packets from the queue and is responsible for interpreting tick data and constructing the order book.
 
 
 ![System Architecture](Architecture/System_Architecture.png)
@@ -50,7 +50,7 @@ The `Architecture/` directory contains a gate-level diagram of the LFSR and MISR
 
 ### Lock-Free SPSC Ring Buffer
 
-The inter-thread queue is a single-producer single-consumer lock-free ring buffer (`Fifo5`), written from scratch. It uses cache-line-aligned cursors, bitwise masking for index computation (power-of-2 capacity), and a zero-copy RAII proxy API -- the producer writes directly into queue memory through a `pusher_t` handle, and cursor advancement happens automatically in the destructor.
+The inter-thread queue is a single-producer single-consumer lock-free ring buffer (`Fifo5`), written from scratch. It uses cache-line-aligned cursors, bitwise masking for index computation (power-of-2 capacity), and a zero-copy RAII proxy API, the producer writes directly into queue memory through a `pusher_t` handle, and cursor advancement happens automatically in the destructor.
 
 The queue has been benchmarked separately using `rdtsc`/`rdtscp` cycle counting. The full implementation and benchmarks are available in their own repository:
 
@@ -107,5 +107,5 @@ The consumer will stream data until you press Enter, then print a summary of tic
 
 ## How MISR Verification Works
 
-The LFSR produces a deterministic sequence from its seed. Because the sequence is fixed, the MISR -- which folds each LFSR output into a running signature -- will always arrive at the same value after exactly 255 steps. The host computes this expected value in software at startup. If the received MISR byte at the end of any period does not match, it indicates data corruption somewhere in the path (FPGA logic fault, UART framing error, or serial link noise).
+The LFSR produces a deterministic sequence from its seed. Because the sequence is fixed, the MISR, which folds each LFSR output into a running signature, will always arrive at the same value after exactly 255 steps. The host computes this expected value in software at startup. If the received MISR byte at the end of any period does not match, it indicates data corruption somewhere in the path (FPGA logic fault, UART framing error, or serial link noise).
 
